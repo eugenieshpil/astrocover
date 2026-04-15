@@ -25,9 +25,9 @@ def load_font(candidates: Sequence[str], size: int):
     raise FileNotFoundError(f"Font not found. Checked: {candidates}")
 
 
-def text_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
+def text_size(draw: ImageDraw.ImageDraw, text: str, font) -> tuple[int, int]:
     bbox = draw.textbbox((0, 0), text, font=font)
-    return bbox[2] - bbox[0]
+    return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
 
 def fit_single_line_font(
@@ -40,7 +40,8 @@ def fit_single_line_font(
 ):
     for size in range(start_size, min_size - 1, -2):
         font = load_font(candidates, size)
-        if text_width(draw, text, font) <= max_width:
+        w, _ = text_size(draw, text, font)
+        if w <= max_width:
             return font
     return load_font(candidates, min_size)
 
@@ -55,9 +56,7 @@ def draw_centered_text(
     shadow_fill: tuple[int, int, int, int] | None = None,
     shadow_offset: int = 3,
 ) -> int:
-    bbox = draw.textbbox((0, 0), text, font=font)
-    w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
+    w, h = text_size(draw, text, font)
     x = int(center_x - w / 2)
 
     if shadow_fill is not None:
@@ -65,6 +64,30 @@ def draw_centered_text(
 
     draw.text((x, y), text, font=font, fill=fill)
     return h
+
+
+def add_text_overlay(base_image: Image.Image, top_y: int, bottom_y: int) -> Image.Image:
+    """
+    Add a soft dark transparent overlay behind the text block
+    to improve readability without killing the background.
+    """
+    width, height = base_image.size
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    padding_top = 80
+    padding_bottom = 80
+
+    y1 = max(0, top_y - padding_top)
+    y2 = min(height, bottom_y + padding_bottom)
+
+    # Main dark band behind the text
+    draw.rectangle(
+        [(0, y1), (width, y2)],
+        fill=(0, 0, 0, 95),
+    )
+
+    return Image.alpha_composite(base_image.convert("RGBA"), overlay)
 
 
 def build_cover(
@@ -85,46 +108,47 @@ def build_cover(
     width, height = img.size
     center_x = width // 2
 
-    main_fill = (246, 249, 255, 255)
-    shadow_fill = (0, 0, 0, 175)
+    main_fill = (248, 250, 255, 255)
+    shadow_fill = (0, 0, 0, 185)
 
-    # Wider safe area for large cover typography
-    max_title_width = int(width * 0.78)
-    max_subtitle_width = int(width * 0.82)
+    max_name_width = int(width * 0.72)
+    max_title_width = int(width * 0.82)
+    max_tagline_width = int(width * 0.55)
 
-    # Large title fonts
+    # Much stronger hierarchy
     name_font = fit_single_line_font(
         draw,
         f"{name},",
         TITLE_FONT_CANDIDATES,
-        max_title_width,
-        start_size=120,
-        min_size=56,
+        max_name_width,
+        start_size=170,
+        min_size=74,
     )
 
-    subtitle_font = fit_single_line_font(
+    title_font = fit_single_line_font(
         draw,
         "here is your personal reading",
         TITLE_FONT_CANDIDATES,
-        max_subtitle_width,
-        start_size=92,
-        min_size=44,
+        max_title_width,
+        start_size=108,
+        min_size=52,
     )
 
-    # Metadata / tagline
-    body_font = load_font(BODY_FONT_CANDIDATES, 44)
-    prepared_font = load_font(BODY_FONT_CANDIDATES, 42)
+    body_font = load_font(BODY_FONT_CANDIDATES, 50)
+    prepared_font = load_font(BODY_FONT_CANDIDATES, 46)
+
     tagline_font = fit_single_line_font(
         draw,
         "Move with it.",
         TITLE_FONT_CANDIDATES,
-        int(width * 0.55),
-        start_size=72,
-        min_size=38,
+        max_tagline_width,
+        start_size=86,
+        min_size=42,
     )
 
-    # Move the whole composition much higher
-    y = int(height * 0.47)
+    # Move whole block significantly higher
+    y = int(height * 0.33)
+    top_of_block = y
 
     # Name
     h = draw_centered_text(
@@ -137,27 +161,29 @@ def build_cover(
         shadow_fill=shadow_fill,
         shadow_offset=4,
     )
-    y += h + 18
+    y += h + 12
 
-    # Main title
+    # Title
     h = draw_centered_text(
         draw=draw,
         text="here is your personal reading",
         center_x=center_x,
         y=y,
-        font=subtitle_font,
+        font=title_font,
         fill=main_fill,
         shadow_fill=shadow_fill,
         shadow_offset=4,
     )
-    y += h + 48
+    y += h + 54
 
-    # Metadata block with much larger spacing
+    # Metadata block with larger spacing
     meta_lines = [
         f"Date of birth: {birth_date}",
         f"Time: {birth_time}",
         f"Place: {birth_place}",
     ]
+
+    meta_line_gap = 16
 
     for line in meta_lines:
         h = draw_centered_text(
@@ -170,11 +196,11 @@ def build_cover(
             shadow_fill=shadow_fill,
             shadow_offset=2,
         )
-        y += h + 18
+        y += h + meta_line_gap
 
-    y += 14
+    y += 18
 
-    # Prepared date
+    # Prepared date line
     h = draw_centered_text(
         draw=draw,
         text=f"Prepared on {prepared_date}",
@@ -185,9 +211,79 @@ def build_cover(
         shadow_fill=shadow_fill,
         shadow_offset=2,
     )
-    y += h + 44
+    y += h + 52
 
     # Tagline
+    h = draw_centered_text(
+        draw=draw,
+        text="Move with it.",
+        center_x=center_x,
+        y=y,
+        font=tagline_font,
+        fill=main_fill,
+        shadow_fill=shadow_fill,
+        shadow_offset=3,
+    )
+    bottom_of_block = y + h
+
+    # Re-open the image and add overlay first, then redraw all text on top
+    img = Image.open(cover_path).convert("RGBA")
+    img = add_text_overlay(img, top_of_block, bottom_of_block)
+    draw = ImageDraw.Draw(img)
+
+    y = int(height * 0.33)
+
+    h = draw_centered_text(
+        draw=draw,
+        text=f"{name},",
+        center_x=center_x,
+        y=y,
+        font=name_font,
+        fill=main_fill,
+        shadow_fill=shadow_fill,
+        shadow_offset=4,
+    )
+    y += h + 12
+
+    h = draw_centered_text(
+        draw=draw,
+        text="here is your personal reading",
+        center_x=center_x,
+        y=y,
+        font=title_font,
+        fill=main_fill,
+        shadow_fill=shadow_fill,
+        shadow_offset=4,
+    )
+    y += h + 54
+
+    for line in meta_lines:
+        h = draw_centered_text(
+            draw=draw,
+            text=line,
+            center_x=center_x,
+            y=y,
+            font=body_font,
+            fill=main_fill,
+            shadow_fill=shadow_fill,
+            shadow_offset=2,
+        )
+        y += h + meta_line_gap
+
+    y += 18
+
+    h = draw_centered_text(
+        draw=draw,
+        text=f"Prepared on {prepared_date}",
+        center_x=center_x,
+        y=y,
+        font=prepared_font,
+        fill=main_fill,
+        shadow_fill=shadow_fill,
+        shadow_offset=2,
+    )
+    y += h + 52
+
     draw_centered_text(
         draw=draw,
         text="Move with it.",
@@ -211,7 +307,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--birth-date", default="{{birth_date}}", help="Date of birth.")
     parser.add_argument("--birth-time", default="{{birth_time}}", help="Birth time.")
     parser.add_argument("--birth-place", default="{{birth_place}}", help="Birth place.")
-    parser.add_argument("--prepared-date", default="{{generation_date}}", help="Reading prepared date.")
+    parser.add_argument("--prepared-date", default="{{generation_date}}", help="Prepared date.")
     return parser.parse_args()
 
 
