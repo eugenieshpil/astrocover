@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -8,21 +7,45 @@ from typing import Sequence
 from PIL import Image, ImageDraw, ImageFont
 
 
+BASE_DIR = Path(__file__).resolve().parent
+
 TITLE_FONT_CANDIDATES = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation2/LiberationSerif-Bold.ttf",
+    str(BASE_DIR / "fonts" / "PlayfairDisplay-Black.ttf"),
 ]
+
 BODY_FONT_CANDIDATES = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+    str(BASE_DIR / "fonts" / "Inter_24pt-Regular.ttf"),
 ]
 
 
-def load_font(candidates: Sequence[str], size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def load_font(candidates: Sequence[str], size: int):
     for path in candidates:
         if Path(path).exists():
             return ImageFont.truetype(path, size=size)
-    return ImageFont.load_default()
+    raise FileNotFoundError(f"Font not found. Checked: {candidates}")
+
+
+def wrap_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:
+    words = text.split()
+    if not words:
+        return [""]
+
+    lines: list[str] = []
+    current = words[0]
+
+    for word in words[1:]:
+        trial = f"{current} {word}"
+        bbox = draw.textbbox((0, 0), trial, font=font)
+        width = bbox[2] - bbox[0]
+
+        if width <= max_width:
+            current = trial
+        else:
+            lines.append(current)
+            current = word
+
+    lines.append(current)
+    return lines
 
 
 def fit_text(
@@ -32,37 +55,21 @@ def fit_text(
     max_width: int,
     start_size: int,
     min_size: int = 20,
-) -> tuple[ImageFont.FreeTypeFont | ImageFont.ImageFont, list[str]]:
+):
     for size in range(start_size, min_size - 1, -2):
         font = load_font(candidates, size)
         wrapped = wrap_text(draw, text, font, max_width)
+
         widest = 0
         for line in wrapped:
             bbox = draw.textbbox((0, 0), line, font=font)
             widest = max(widest, bbox[2] - bbox[0])
+
         if widest <= max_width:
             return font, wrapped
+
     font = load_font(candidates, min_size)
     return font, wrap_text(draw, text, font, max_width)
-
-
-def wrap_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:
-    words = text.split()
-    if not words:
-        return [""]
-    lines: list[str] = []
-    current = words[0]
-    for word in words[1:]:
-        trial = f"{current} {word}"
-        bbox = draw.textbbox((0, 0), trial, font=font)
-        width = bbox[2] - bbox[0]
-        if width <= max_width:
-            current = trial
-        else:
-            lines.append(current)
-            current = word
-    lines.append(current)
-    return lines
 
 
 def draw_centered_lines(
@@ -77,27 +84,34 @@ def draw_centered_lines(
     shadow_offset: int = 3,
 ) -> int:
     y = start_y
+
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=font)
         text_w = bbox[2] - bbox[0]
         text_h = bbox[3] - bbox[1]
         x = int(center_x - text_w / 2)
+
         if shadow_fill is not None:
             draw.text((x + shadow_offset, y + shadow_offset), line, font=font, fill=shadow_fill)
+
         draw.text((x, y), line, font=font, fill=fill)
         y += text_h + line_gap
+
     return y
 
 
 def build_cover(
-    cover_path: Path,
-    output_path: Path,
+    cover_path: Path | str,
+    output_path: Path | str,
     name: str,
     birth_date: str,
     birth_time: str,
     birth_place: str,
     prepared_date: str,
 ) -> None:
+    cover_path = Path(cover_path)
+    output_path = Path(output_path)
+
     img = Image.open(cover_path).convert("RGBA")
     draw = ImageDraw.Draw(img)
 
@@ -106,6 +120,7 @@ def build_cover(
     safe_width = int(width * 0.72)
 
     title_text = f"{name}, here is your personal reading"
+
     title_font, title_lines = fit_text(
         draw=draw,
         text=title_text,
@@ -123,13 +138,14 @@ def build_cover(
     shadow_fill = (0, 0, 0, 165)
 
     y = int(height * 0.60)
+
     y = draw_centered_lines(
-        draw,
-        title_lines,
-        center_x,
-        y,
-        title_font,
-        main_fill,
+        draw=draw,
+        lines=title_lines,
+        center_x=center_x,
+        start_y=y,
+        font=title_font,
+        fill=main_fill,
         shadow_fill=shadow_fill,
         line_gap=8,
         shadow_offset=3,
@@ -142,13 +158,14 @@ def build_cover(
         f"Time: {birth_time}",
         f"Place: {birth_place}",
     ]
+
     y = draw_centered_lines(
-        draw,
-        meta_lines,
-        center_x,
-        y,
-        body_font,
-        main_fill,
+        draw=draw,
+        lines=meta_lines,
+        center_x=center_x,
+        start_y=y,
+        font=body_font,
+        fill=main_fill,
         shadow_fill=shadow_fill,
         line_gap=12,
         shadow_offset=2,
@@ -157,12 +174,12 @@ def build_cover(
     y += 18
 
     y = draw_centered_lines(
-        draw,
-        [f"Reading prepared: {prepared_date}"],
-        center_x,
-        y,
-        small_font,
-        main_fill,
+        draw=draw,
+        lines=[f"Reading prepared: {prepared_date}"],
+        center_x=center_x,
+        start_y=y,
+        font=small_font,
+        fill=main_fill,
         shadow_fill=shadow_fill,
         line_gap=8,
         shadow_offset=2,
@@ -171,12 +188,12 @@ def build_cover(
     y += 18
 
     draw_centered_lines(
-        draw,
-        ["Move with it."],
-        center_x,
-        y,
-        tagline_font,
-        main_fill,
+        draw=draw,
+        lines=["Move with it."],
+        center_x=center_x,
+        start_y=y,
+        font=tagline_font,
+        fill=main_fill,
         shadow_fill=shadow_fill,
         line_gap=8,
         shadow_offset=2,
@@ -188,7 +205,7 @@ def build_cover(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate a personalized cover image for the astrology reading PDF.")
-    parser.add_argument("--cover", default="/mnt/data/cover.png", help="Path to the base A4 cover image.")
+    parser.add_argument("--cover", default=str(BASE_DIR / "cover.png"), help="Path to the base A4 cover image.")
     parser.add_argument("--output", default="/mnt/data/personalized_cover.png", help="Output PNG path.")
     parser.add_argument("--name", default="{{name}}", help="Recipient name.")
     parser.add_argument("--birth-date", default="{{birth_date}}", help="Date of birth.")
