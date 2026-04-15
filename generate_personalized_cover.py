@@ -25,79 +25,46 @@ def load_font(candidates: Sequence[str], size: int):
     raise FileNotFoundError(f"Font not found. Checked: {candidates}")
 
 
-def wrap_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:
-    words = text.split()
-    if not words:
-        return [""]
-
-    lines: list[str] = []
-    current = words[0]
-
-    for word in words[1:]:
-        trial = f"{current} {word}"
-        bbox = draw.textbbox((0, 0), trial, font=font)
-        width = bbox[2] - bbox[0]
-
-        if width <= max_width:
-            current = trial
-        else:
-            lines.append(current)
-            current = word
-
-    lines.append(current)
-    return lines
+def text_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return bbox[2] - bbox[0]
 
 
-def fit_text(
+def fit_single_line_font(
     draw: ImageDraw.ImageDraw,
     text: str,
     candidates: Sequence[str],
     max_width: int,
     start_size: int,
-    min_size: int = 24,
+    min_size: int = 32,
 ):
     for size in range(start_size, min_size - 1, -2):
         font = load_font(candidates, size)
-        wrapped = wrap_text(draw, text, font, max_width)
-
-        widest = 0
-        for line in wrapped:
-            bbox = draw.textbbox((0, 0), line, font=font)
-            widest = max(widest, bbox[2] - bbox[0])
-
-        if widest <= max_width:
-            return font, wrapped
-
-    font = load_font(candidates, min_size)
-    return font, wrap_text(draw, text, font, max_width)
+        if text_width(draw, text, font) <= max_width:
+            return font
+    return load_font(candidates, min_size)
 
 
-def draw_centered_lines(
+def draw_centered_text(
     draw: ImageDraw.ImageDraw,
-    lines: list[str],
+    text: str,
     center_x: int,
-    start_y: int,
+    y: int,
     font,
     fill: tuple[int, int, int, int],
     shadow_fill: tuple[int, int, int, int] | None = None,
-    line_gap: int = 10,
     shadow_offset: int = 3,
 ) -> int:
-    y = start_y
+    bbox = draw.textbbox((0, 0), text, font=font)
+    w = bbox[2] - bbox[0]
+    h = bbox[3] - bbox[1]
+    x = int(center_x - w / 2)
 
-    for line in lines:
-        bbox = draw.textbbox((0, 0), line, font=font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-        x = int(center_x - text_w / 2)
+    if shadow_fill is not None:
+        draw.text((x + shadow_offset, y + shadow_offset), text, font=font, fill=shadow_fill)
 
-        if shadow_fill is not None:
-            draw.text((x + shadow_offset, y + shadow_offset), line, font=font, fill=shadow_fill)
-
-        draw.text((x, y), line, font=font, fill=fill)
-        y += text_h + line_gap
-
-    return y
+    draw.text((x, y), text, font=font, fill=fill)
+    return h
 
 
 def build_cover(
@@ -118,92 +85,118 @@ def build_cover(
     width, height = img.size
     center_x = width // 2
 
-    # A little wider safe area because title is split into two lines anyway
-    safe_width = int(width * 0.78)
+    main_fill = (246, 249, 255, 255)
+    shadow_fill = (0, 0, 0, 175)
 
-    # Typography
-    title_name_font = load_font(TITLE_FONT_CANDIDATES, 74)
-    title_main_font, title_main_lines = fit_text(
+    # Wider safe area for large cover typography
+    max_title_width = int(width * 0.78)
+    max_subtitle_width = int(width * 0.82)
+
+    # Large title fonts
+    name_font = fit_single_line_font(
+        draw,
+        f"{name},",
+        TITLE_FONT_CANDIDATES,
+        max_title_width,
+        start_size=120,
+        min_size=56,
+    )
+
+    subtitle_font = fit_single_line_font(
+        draw,
+        "here is your personal reading",
+        TITLE_FONT_CANDIDATES,
+        max_subtitle_width,
+        start_size=92,
+        min_size=44,
+    )
+
+    # Metadata / tagline
+    body_font = load_font(BODY_FONT_CANDIDATES, 44)
+    prepared_font = load_font(BODY_FONT_CANDIDATES, 42)
+    tagline_font = fit_single_line_font(
+        draw,
+        "Move with it.",
+        TITLE_FONT_CANDIDATES,
+        int(width * 0.55),
+        start_size=72,
+        min_size=38,
+    )
+
+    # Move the whole composition much higher
+    y = int(height * 0.47)
+
+    # Name
+    h = draw_centered_text(
+        draw=draw,
+        text=f"{name},",
+        center_x=center_x,
+        y=y,
+        font=name_font,
+        fill=main_fill,
+        shadow_fill=shadow_fill,
+        shadow_offset=4,
+    )
+    y += h + 18
+
+    # Main title
+    h = draw_centered_text(
         draw=draw,
         text="here is your personal reading",
-        candidates=TITLE_FONT_CANDIDATES,
-        max_width=safe_width,
-        start_size=64,
-        min_size=34,
-    )
-
-    body_font = load_font(BODY_FONT_CANDIDATES, 34)
-    small_font = load_font(BODY_FONT_CANDIDATES, 32)
-    tagline_font = load_font(TITLE_FONT_CANDIDATES, 46)
-
-    main_fill = (246, 249, 255, 255)
-    shadow_fill = (0, 0, 0, 170)
-
-    # Move the whole block higher
-    y = int(height * 0.58)
-
-    # First line: name
-    y = draw_centered_lines(
-        draw=draw,
-        lines=[f"{name},"],
         center_x=center_x,
-        start_y=y,
-        font=title_name_font,
+        y=y,
+        font=subtitle_font,
         fill=main_fill,
         shadow_fill=shadow_fill,
-        line_gap=10,
-        shadow_offset=3,
+        shadow_offset=4,
     )
+    y += h + 48
 
-    # Second part of title
-    y += 6
-    y = draw_centered_lines(
-        draw=draw,
-        lines=title_main_lines,
-        center_x=center_x,
-        start_y=y,
-        font=title_main_font,
-        fill=main_fill,
-        shadow_fill=shadow_fill,
-        line_gap=8,
-        shadow_offset=3,
-    )
-
-    # Space before metadata
-    y += 26
-
+    # Metadata block with much larger spacing
     meta_lines = [
         f"Date of birth: {birth_date}",
         f"Time: {birth_time}",
         f"Place: {birth_place}",
-        f"Reading prepared: {prepared_date}",
     ]
 
-    y = draw_centered_lines(
+    for line in meta_lines:
+        h = draw_centered_text(
+            draw=draw,
+            text=line,
+            center_x=center_x,
+            y=y,
+            font=body_font,
+            fill=main_fill,
+            shadow_fill=shadow_fill,
+            shadow_offset=2,
+        )
+        y += h + 18
+
+    y += 14
+
+    # Prepared date
+    h = draw_centered_text(
         draw=draw,
-        lines=meta_lines,
+        text=f"Reading prepared: {prepared_date}",
         center_x=center_x,
-        start_y=y,
-        font=body_font,
+        y=y,
+        font=prepared_font,
         fill=main_fill,
         shadow_fill=shadow_fill,
-        line_gap=14,
         shadow_offset=2,
     )
+    y += h + 44
 
-    # Space before tagline
-    y += 26
-
-    draw_centered_lines(
+    # Tagline
+    draw_centered_text(
         draw=draw,
-        lines=["Move with it."],
+        text="Move with it.",
         center_x=center_x,
-        start_y=y,
+        y=y,
         font=tagline_font,
         fill=main_fill,
         shadow_fill=shadow_fill,
-        line_gap=8,
-        shadow_offset=2,
+        shadow_offset=3,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
