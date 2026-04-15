@@ -177,7 +177,7 @@ def build_cover(
     # Prepared date
     h = draw_centered_text(
         draw=draw,
-        text=f"Reading prepared: {prepared_date}",
+        text=f"Prepared on {prepared_date}",
         center_x=center_x,
         y=y,
         font=prepared_font,
