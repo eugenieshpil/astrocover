@@ -54,7 +54,7 @@ def fit_text(
     candidates: Sequence[str],
     max_width: int,
     start_size: int,
-    min_size: int = 20,
+    min_size: int = 24,
 ):
     for size in range(start_size, min_size - 1, -2):
         font = load_font(candidates, size)
@@ -117,46 +117,66 @@ def build_cover(
 
     width, height = img.size
     center_x = width // 2
-    safe_width = int(width * 0.72)
 
-    title_text = f"{name}, here is your personal reading"
+    # A little wider safe area because title is split into two lines anyway
+    safe_width = int(width * 0.78)
 
-    title_font, title_lines = fit_text(
+    # Typography
+    title_name_font = load_font(TITLE_FONT_CANDIDATES, 74)
+    title_main_font, title_main_lines = fit_text(
         draw=draw,
-        text=title_text,
+        text="here is your personal reading",
         candidates=TITLE_FONT_CANDIDATES,
         max_width=safe_width,
-        start_size=58,
-        min_size=28,
+        start_size=64,
+        min_size=34,
     )
 
-    body_font = load_font(BODY_FONT_CANDIDATES, 28)
-    small_font = load_font(BODY_FONT_CANDIDATES, 25)
-    tagline_font = load_font(TITLE_FONT_CANDIDATES, 32)
+    body_font = load_font(BODY_FONT_CANDIDATES, 34)
+    small_font = load_font(BODY_FONT_CANDIDATES, 32)
+    tagline_font = load_font(TITLE_FONT_CANDIDATES, 46)
 
     main_fill = (246, 249, 255, 255)
-    shadow_fill = (0, 0, 0, 165)
+    shadow_fill = (0, 0, 0, 170)
 
-    y = int(height * 0.60)
+    # Move the whole block higher
+    y = int(height * 0.58)
 
+    # First line: name
     y = draw_centered_lines(
         draw=draw,
-        lines=title_lines,
+        lines=[f"{name},"],
         center_x=center_x,
         start_y=y,
-        font=title_font,
+        font=title_name_font,
+        fill=main_fill,
+        shadow_fill=shadow_fill,
+        line_gap=10,
+        shadow_offset=3,
+    )
+
+    # Second part of title
+    y += 6
+    y = draw_centered_lines(
+        draw=draw,
+        lines=title_main_lines,
+        center_x=center_x,
+        start_y=y,
+        font=title_main_font,
         fill=main_fill,
         shadow_fill=shadow_fill,
         line_gap=8,
         shadow_offset=3,
     )
 
+    # Space before metadata
     y += 26
 
     meta_lines = [
         f"Date of birth: {birth_date}",
         f"Time: {birth_time}",
         f"Place: {birth_place}",
+        f"Reading prepared: {prepared_date}",
     ]
 
     y = draw_centered_lines(
@@ -167,25 +187,12 @@ def build_cover(
         font=body_font,
         fill=main_fill,
         shadow_fill=shadow_fill,
-        line_gap=12,
+        line_gap=14,
         shadow_offset=2,
     )
 
-    y += 18
-
-    y = draw_centered_lines(
-        draw=draw,
-        lines=[f"Reading prepared: {prepared_date}"],
-        center_x=center_x,
-        start_y=y,
-        font=small_font,
-        fill=main_fill,
-        shadow_fill=shadow_fill,
-        line_gap=8,
-        shadow_offset=2,
-    )
-
-    y += 18
+    # Space before tagline
+    y += 26
 
     draw_centered_lines(
         draw=draw,
