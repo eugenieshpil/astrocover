@@ -76,3 +76,11 @@ ul, ol {
 li {
   margin-bottom: 5pt;
 }
+
+h2, h3 {
+  page-break-inside: avoid;
+}
+
+p, li {
+  page-break-inside: avoid;
+}
