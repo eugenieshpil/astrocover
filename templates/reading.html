@@ -5,8 +5,14 @@
   <title>Reading</title>
 </head>
 <body>
-  <main class="document">
-    {{ content | safe }}
-  </main>
+  <section class="cover-page">
+    <img src="{{ cover_url }}" alt="Cover">
+  </section>
+
+  <section class="content-page">
+    <main class="document">
+      {{ content | safe }}
+    </main>
+  </section>
 </body>
 </html>
