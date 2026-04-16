@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import markdown
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, HttpUrl
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -41,7 +41,7 @@ def markdown_to_html(md_text: str) -> str:
     )
 
 
-def render_final_pdf(cover_url: str, html_content: str) -> bytes:
+def build_final_pdf_file(cover_url: str, html_content: str, output_path: Path) -> None:
     template = jinja_env.get_template("reading.html")
     full_html = template.render(
         cover_url=cover_url,
@@ -50,13 +50,13 @@ def render_final_pdf(cover_url: str, html_content: str) -> bytes:
 
     css_path = STATIC_DIR / "styles.css"
 
-    pdf_bytes = HTML(
+    HTML(
         string=full_html,
         base_url=str(BASE_DIR)
     ).write_pdf(
+        target=str(output_path),
         stylesheets=[CSS(filename=str(css_path))]
     )
-    return pdf_bytes
 
 
 @app.post("/generate-cover")
@@ -85,12 +85,18 @@ def generate_cover(req: CoverRequest):
 def generate_pdf(payload: PDFRequest):
     try:
         html_content = markdown_to_html(payload.reading_text)
-        final_pdf = render_final_pdf(str(payload.cover_url), html_content)
+        output_path = Path("/tmp/final-reading.pdf")
 
-        return Response(
-            content=final_pdf,
+        build_final_pdf_file(
+            cover_url=str(payload.cover_url),
+            html_content=html_content,
+            output_path=output_path
+        )
+
+        return FileResponse(
+            path=output_path,
             media_type="application/pdf",
-            headers={"Content-Disposition": "inline; filename=reading.pdf"}
+            filename="final-reading.pdf"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
