@@ -8,18 +8,20 @@
   margin: 0;
 }
 
-/* Fonts */
 @font-face {
   font-family: "Inter";
   src: url("../fonts/Inter_24pt-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
 }
 
 @font-face {
-  font-family: "Playfair";
+  font-family: "PlayfairDisplay";
   src: url("../fonts/PlayfairDisplay-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
 }
 
-/* Base */
 body {
   margin: 0;
   padding: 0;
@@ -45,24 +47,23 @@ body {
   page: auto;
 }
 
-/* Slightly narrower content for premium feel */
 .document {
   width: 100%;
   max-width: 88%;
 }
 
-/* Main sections */
 h2 {
-  font-family: "Playfair";
+  font-family: "PlayfairDisplay";
   font-size: 17pt;
-  font-weight: normal;
+  font-weight: 600;
+  font-style: normal;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
   margin-top: 28pt;
   margin-bottom: 16pt;
-  line-height: 1.2;
   page-break-after: avoid;
 }
 
-/* Elegant separator */
 h2::after {
   content: "";
   display: block;
@@ -72,7 +73,6 @@ h2::after {
   margin-top: 10pt;
 }
 
-/* Subsections */
 h3 {
   font-family: "Inter";
   font-size: 10.8pt;
@@ -84,13 +84,12 @@ h3 {
   page-break-after: avoid;
 }
 
-/* Paragraphs — больше воздуха */
 p {
   margin: 0 0 13pt 0;
 }
 
-/* Lists */
-ul, ol {
+ul,
+ol {
   margin: 0 0 12pt 18pt;
 }
 
@@ -98,16 +97,16 @@ li {
   margin-bottom: 6pt;
 }
 
-/* Prevent ugly breaks */
-h2, h3 {
+h2,
+h3 {
   page-break-inside: avoid;
 }
 
-p, li {
+p,
+li {
   page-break-inside: avoid;
 }
 
-/* Emphasis */
 strong {
   font-weight: 600;
   color: #111111;
@@ -117,7 +116,6 @@ em {
   font-style: italic;
 }
 
-/* Optional premium block */
 blockquote {
   margin: 16pt 0;
   padding-left: 14pt;
