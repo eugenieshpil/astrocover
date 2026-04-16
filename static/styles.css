@@ -1,6 +1,6 @@
 @page {
   size: A4;
-  margin: 25mm 20mm 25mm 20mm;
+  margin: 24mm 24mm 24mm 24mm;
 }
 
 @page cover {
@@ -23,8 +23,8 @@ body {
   padding: 0;
   color: #111111;
   font-family: "Inter";
-  font-size: 11.5pt;
-  line-height: 1.6;
+  font-size: 10pt;
+  line-height: 1.45;
 }
 
 .cover-page {
@@ -49,32 +49,32 @@ body {
 
 h2 {
   font-family: "Playfair";
-  font-size: 20pt;
+  font-size: 18pt;
   font-weight: normal;
-  margin-top: 28pt;
-  margin-bottom: 12pt;
+  margin-top: 24pt;
+  margin-bottom: 10pt;
   page-break-after: avoid;
 }
 
 h3 {
   font-family: "Playfair";
-  font-size: 15pt;
+  font-size: 13pt;
   font-weight: normal;
-  margin-top: 18pt;
-  margin-bottom: 8pt;
+  margin-top: 16pt;
+  margin-bottom: 6pt;
   page-break-after: avoid;
 }
 
 p {
-  margin: 0 0 10pt 0;
+  margin: 0 0 8pt 0;
 }
 
 ul, ol {
-  margin: 0 0 12pt 20pt;
+  margin: 0 0 10pt 18pt;
 }
 
 li {
-  margin-bottom: 5pt;
+  margin-bottom: 4pt;
 }
 
 h2, h3 {
