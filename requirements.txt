@@ -1,3 +1,7 @@
 fastapi
 uvicorn
 pillow
+markdown
+jinja2
+weasyprint
+pypdf
