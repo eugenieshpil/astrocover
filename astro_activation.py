@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 router = APIRouter()
 
-ASTRO_COMPUTATION_VERSION = "h2_2026_degree_based_v1"
+ASTRO_COMPUTATION_VERSION = "h2_2026_degree_based_v2"
 
 
 SIGN_RANGES = {
@@ -79,18 +79,32 @@ class AstroActivationMapRequest(BaseModel):
 
 
 def model_to_dict(model: BaseModel) -> Dict[str, Any]:
+    """Compatibility helper for Pydantic v1 and v2."""
     if hasattr(model, "model_dump"):
         return model.model_dump()
     return model.dict()
 
 
 def extract_houses(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Extract and normalize the 12 Placidus houses from AstrologyAPI western_chart_data.
+
+    Accepted shapes:
+    - {"western_chart_data": {"houses": [...]}}
+    - {"western_chart_data": {"data": {"houses": [...]}}}
+    - direct payload containing {"houses": [...]}
+    - direct payload containing {"data": {"houses": [...]}}
+    """
     western = payload.get("western_chart_data", payload)
 
     if isinstance(western, dict) and "houses" in western:
         houses = western["houses"]
-    elif isinstance(western, dict) and "data" in western and "houses" in western["data"]:
+    elif isinstance(western, dict) and "data" in western and isinstance(western["data"], dict) and "houses" in western["data"]:
         houses = western["data"]["houses"]
+    elif isinstance(payload, dict) and "houses" in payload:
+        houses = payload["houses"]
+    elif isinstance(payload, dict) and "data" in payload and isinstance(payload["data"], dict) and "houses" in payload["data"]:
+        houses = payload["data"]["houses"]
     else:
         raise HTTPException(
             status_code=400,
@@ -116,7 +130,10 @@ def extract_houses(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         except (KeyError, TypeError, ValueError):
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid house object. Each house must include house_id, start_degree, end_degree. Received: {house}",
+                detail=(
+                    "Invalid house object. Each house must include "
+                    f"house_id, start_degree, end_degree. Received: {house}"
+                ),
             )
 
         normalized.append(
@@ -125,13 +142,86 @@ def extract_houses(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "start_degree": start_degree,
                 "end_degree": end_degree,
                 "sign": house.get("sign"),
+                "planets": house.get("planets", []),
             }
         )
 
     return sorted(normalized, key=lambda h: h["house_id"])
 
 
+def get_sign_from_longitude(absolute_degree: float) -> str:
+    degree = absolute_degree % 360
+
+    for sign, (start, end) in SIGN_RANGES.items():
+        if start <= degree < end:
+            return sign
+
+    if degree == 360:
+        return "Pisces"
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Could not determine sign for longitude {absolute_degree}.",
+    )
+
+
+def extract_natal_summary(houses: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Extract key natal fields needed downstream by Step 1 / Step 2.
+
+    - Sun is found inside houses[].planets[] where name == "Sun".
+    - Ascendant is represented by House 1 start_degree.
+    """
+    sun_sign = None
+    sun_house = None
+    sun_full_degree = None
+
+    for house in houses:
+        for planet in house.get("planets", []):
+            if planet.get("name") == "Sun":
+                sun_sign = planet.get("sign")
+                sun_house = int(house["house_id"])
+                sun_full_degree = float(planet.get("full_degree"))
+                break
+
+        if sun_sign is not None:
+            break
+
+    if sun_sign is None or sun_house is None or sun_full_degree is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not extract Sun data from western_chart_data.houses[].planets[].",
+        )
+
+    house_1 = next((house for house in houses if int(house["house_id"]) == 1), None)
+
+    if house_1 is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not find House 1 to extract Ascendant.",
+        )
+
+    asc_full_degree = float(house_1["start_degree"])
+    asc_sign = get_sign_from_longitude(asc_full_degree)
+
+    return {
+        "sun_sign": sun_sign,
+        "sun_house": sun_house,
+        "sun_full_degree": sun_full_degree,
+        "asc_sign": asc_sign,
+        "asc_full_degree": asc_full_degree,
+    }
+
+
 def expand_house_interval(house: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Converts a house interval into one or two non-wrapping intervals.
+
+    Example:
+    House 12: 320.78 -> 4.14 becomes:
+    - 320.78 -> 360
+    - 0 -> 4.14
+    """
     start = house["start_degree"]
     end = house["end_degree"]
 
@@ -165,6 +255,7 @@ def expand_house_interval(house: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def format_sign_degree(sign: str, absolute_degree: float) -> str:
+    """Format absolute longitude as degree inside a specific sign."""
     sign_start, sign_end = SIGN_RANGES[sign]
 
     degree = absolute_degree
@@ -188,6 +279,7 @@ def format_sign_degree(sign: str, absolute_degree: float) -> str:
 
 
 def split_sign_range_by_houses(sign: str, houses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Split a 30-degree zodiac sign range by Placidus house intervals."""
     if sign not in SIGN_RANGES:
         raise HTTPException(status_code=400, detail=f"Unknown sign: {sign}")
 
@@ -231,6 +323,7 @@ def split_sign_range_by_houses(sign: str, houses: List[Dict[str, Any]]) -> List[
 
 
 def choose_primary_house(segments: List[Dict[str, Any]]) -> int:
+    """MVP rule: primary house is the house covering the largest part of the sign."""
     largest = max(segments, key=lambda s: s["length_degrees"])
     return int(largest["house"])
 
@@ -303,6 +396,7 @@ async def compute_astro_activation_map(request: AstroActivationMapRequest):
     payload = model_to_dict(request)
 
     houses = extract_houses(payload)
+    natal_summary = extract_natal_summary(houses)
 
     house_cusps = {
         str(house["house_id"]): {
@@ -320,6 +414,7 @@ async def compute_astro_activation_map(request: AstroActivationMapRequest):
         "house_system": request.house_system,
         "reading_period": request.reading_period,
         "astro_computation_version": ASTRO_COMPUTATION_VERSION,
+        "natal_summary": natal_summary,
         "house_cusps": house_cusps,
         "activation_map": activation_result["activation_map"],
         "summary_fields": activation_result["summary_fields"],
