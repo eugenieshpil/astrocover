@@ -8,8 +8,10 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from weasyprint import HTML, CSS
 
 from generate_personalized_cover import build_cover
+from astro_activation import router as astro_activation_router
 
 app = FastAPI()
+app.include_router(astro_activation_router)
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
