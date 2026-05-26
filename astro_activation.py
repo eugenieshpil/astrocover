@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 router = APIRouter()
 
-ASTRO_COMPUTATION_VERSION = "h2_2026_degree_based_v2"
+ASTRO_COMPUTATION_VERSION = "h2_2026_degree_based_v3"
 
 
 SIGN_RANGES = {
@@ -408,6 +408,24 @@ async def compute_astro_activation_map(request: AstroActivationMapRequest):
     }
 
     activation_result = build_activation_map(houses)
+    activation_map = activation_result["activation_map"]
+    summary_fields = activation_result["summary_fields"]
+
+    supabase_update = {
+        "asc_sign": natal_summary["asc_sign"],
+        "sun_sign": natal_summary["sun_sign"],
+        "sun_house": natal_summary["sun_house"],
+
+        "cancer_house": summary_fields["cancer_house"],
+        "leo_house": summary_fields["leo_house"],
+        "aquarius_house": summary_fields["aquarius_house"],
+        "aries_house": summary_fields["aries_house"],
+        "gemini_house": summary_fields["gemini_house"],
+
+        "house_cusps_json": house_cusps,
+        "transit_activation_map_json": activation_map,
+        "astro_computation_version": ASTRO_COMPUTATION_VERSION,
+    }
 
     return {
         "order_id": request.order_id,
@@ -416,6 +434,7 @@ async def compute_astro_activation_map(request: AstroActivationMapRequest):
         "astro_computation_version": ASTRO_COMPUTATION_VERSION,
         "natal_summary": natal_summary,
         "house_cusps": house_cusps,
-        "activation_map": activation_result["activation_map"],
-        "summary_fields": activation_result["summary_fields"],
+        "activation_map": activation_map,
+        "summary_fields": summary_fields,
+        "supabase_update": supabase_update,
     }
